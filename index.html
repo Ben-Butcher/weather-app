@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./styles/style.css" />
+    <script src="./scripts/app.js" defer></script>
+    <title>Weather App</title>
+  </head>
+  <body>
+    <main>
+      <form action="post" id="weather-form">
+        <div>
+          <label for="city">City</label>
+          <input type="text" id="city" placeholder="Pretoria" />
+        </div>
+        <button id="search-btn">Search</button>
+      </form>
+
+      <div class="weather-information" id="main"></div>
+    </main>
+  </body>
+</html>
