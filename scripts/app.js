@@ -37,7 +37,7 @@ form.addEventListener("submit", async (e) => {
 async function getWeather(latLong) {
   try {
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latLong.latitude}&longitude=${latLong.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,cloud_cover&daily=temperature_2m_max,temperature_2m_min,cloud_cover,precipitation_sum&timezone=auto`
+      `https://api.open-meteo.com/v1/forecast?latitude=${latLong.latitude}&longitude=${latLong.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,cloud_cover`
     );
 
     if (!response.ok) {
