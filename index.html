@@ -12,9 +12,14 @@
       <form action="post" id="weather-form">
         <div>
           <label for="city">City</label>
-          <input type="text" id="city" placeholder="Pretoria" />
+          <input
+            type="text"
+            id="city"
+            placeholder="Enter city name (e.g., London, Tokyo, New York)"
+            autocomplete="off"
+          />
         </div>
-        <button id="search-btn">Search</button>
+        <button id="search-btn" type="submit">Search</button>
       </form>
 
       <div class="weather-information" id="main"></div>
