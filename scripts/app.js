@@ -1,248 +1,165 @@
 const form = document.getElementById("weather-form");
 const searchBtn = document.getElementById("search-btn");
+const FORECAST_DAYS = 3;
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const city = document.getElementById("city").value.trim();
 
-  // Input validation
   if (!city) {
     showError("Please enter a city name");
     return;
   }
 
-  // Disable button and show loading state
   searchBtn.disabled = true;
   searchBtn.textContent = "Searching...";
 
   try {
-    const locationData = await getLatLong(city);
-    if (!locationData) return;
-
-    const weatherData = await getWeather(locationData);
-
-    if (weatherData && weatherData.current) {
-      createWeatherCard(weatherData.current, weatherData.daily);
-      document.getElementById("city").value = ""; // Clear input after successful search
-    }
+    const location = await getLatLong(city);
+    const weather = await getWeather(location);
+    createWeatherCard(weather.current, weather.daily);
+    document.getElementById("city").value = "";
   } catch (err) {
-    console.error("Error in form submission:", err);
+    showError(err.message);
   } finally {
-    // Re-enable button
     searchBtn.disabled = false;
     searchBtn.textContent = "Search";
   }
 });
 
-async function getWeather(latLong) {
-  try {
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latLong.latitude}&longitude=${latLong.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,cloud_cover`
-    );
+async function getLatLong(city) {
+  const res = await fetch(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`
+  );
+  if (!res.ok) throw new Error(`Location lookup failed (${res.status})`);
 
-    if (!response.ok) {
-      throw new Error(`status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (err) {
-    console.error("Error fetching weather:", err);
-    showError("Failed to fetch weather data. Please try again.");
+  const data = await res.json();
+  if (!data.results?.length) {
+    throw new Error(`"${city}" was not found. Please check spelling.`);
   }
+  return data.results[0];
 }
 
-async function getLatLong(locationName) {
-  try {
-    const response = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1`
-    );
+async function getWeather({ latitude, longitude }) {
+  const params = new URLSearchParams({
+    latitude,
+    longitude,
+    current:
+      "temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,cloud_cover",
+    daily: "temperature_2m_max,temperature_2m_min,cloud_cover_mean,precipitation_sum",
+    timezone: "auto",
+    forecast_days: FORECAST_DAYS + 1, // index 0 is today
+  });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.results || data.results.length === 0) {
-      showError(
-        locationName
-          ? `"${locationName}" was not found. Please check spelling.`
-          : "Please enter a location name."
-      );
-      throw new Error("Location not found");
-    }
-    return data.results[0];
-  } catch (err) {
-    console.error("Error fetching location:", err);
-  }
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!res.ok) throw new Error(`Failed to fetch weather data (${res.status})`);
+  return res.json();
 }
 
 function showError(message) {
   const container = document.getElementById("main");
   container.innerHTML = "";
-  const errorElement = document.createElement("div");
-  errorElement.className = "error-message";
-  errorElement.innerText = message;
-  container.appendChild(errorElement);
+  container.appendChild(el("div", "error-message", message));
 }
 
-function createWeatherCard(currentData, dailyData) {
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function createWeatherCard(current, daily) {
   const container = document.getElementById("main");
   container.innerHTML = "";
 
-  // Current weather section
-  const currentSection = document.createElement("div");
-  currentSection.className = "weather-section";
-
-  const currentTitle = document.createElement("h2");
-  currentTitle.className = "section-title";
-  currentTitle.textContent = "Current Weather";
-  currentSection.appendChild(currentTitle);
-
-  const weatherDetails = [
-    {
-      label: "Temperature: ",
-      value: `${currentData.temperature_2m}°C`,
-      isTempCard: true,
-    },
-    {
-      label: "Feels Like: ",
-      value: `${currentData.apparent_temperature}°C`,
-      isTempCard: true,
-    },
-    {
-      label: "Humidity: ",
-      value: `${currentData.relative_humidity_2m}%`,
-    },
-    { label: "Pressure: ", value: `${currentData.surface_pressure} hPa` },
-    { label: "Wind Speed: ", value: `${currentData.wind_speed_10m} m/s` },
-    { label: "Clouds: ", value: `${getCloudCover(currentData.cloud_cover)}` },
-  ];
-
-  const currentGrid = document.createElement("div");
-  currentGrid.className = "weather-grid";
-
-  weatherDetails.forEach((item) => {
-    const card = document.createElement("div");
-    card.className = "weather-card";
-
-    const label = document.createElement("span");
-    label.className = "weather-label";
-    label.textContent = item.label;
-
-    const value = document.createElement("span");
-    value.className = "weather-value";
-    value.textContent = item.value;
-
-    card.appendChild(label);
-    card.appendChild(value);
-    currentGrid.appendChild(card);
-
-    // Temperature conversion on click - FIXED
-    if (item.isTempCard) {
-      card.style.cursor = "pointer";
-      card.addEventListener("click", () => {
-        const currentText = value.textContent;
-        const lastChar = currentText[currentText.length - 1];
-
-        // Extract the numeric value
-        const tempValue = parseFloat(currentText);
-
-        if (lastChar === "C") {
-          // Convert Celsius to Fahrenheit
-          const fahrenheit = (tempValue * 9) / 5 + 32;
-          value.textContent = fahrenheit.toFixed(1) + "°F";
-        } else if (lastChar === "F") {
-          // Convert Fahrenheit to Celsius
-          const celsius = ((tempValue - 32) * 5) / 9;
-          value.textContent = celsius.toFixed(1) + "°C";
-        }
-      });
-    }
-  });
-
-  currentSection.appendChild(currentGrid);
-
-  const tempHint = document.createElement("span");
-  tempHint.className = "info-hint";
-  tempHint.textContent =
-    "💡 Click temperature cards to convert between °C and °F";
-  currentSection.appendChild(tempHint);
-
-  container.appendChild(currentSection);
-
-  // 2-Day Forecast section
-  if (dailyData && dailyData.time) {
-    const forecastSection = document.createElement("div");
-    forecastSection.className = "weather-section";
-
-    const forecastTitle = document.createElement("h2");
-    forecastTitle.className = "section-title";
-    forecastTitle.textContent = "2-Day Forecast";
-    forecastSection.appendChild(forecastTitle);
-
-    const forecastGrid = document.createElement("div");
-    forecastGrid.className = "forecast-grid";
-
-    // Display next 2 days
-    for (let i = 1; i <= 2; i++) {
-      if (dailyData.time[i]) {
-        const forecastCard = document.createElement("div");
-        forecastCard.className = "forecast-card";
-
-        const date = new Date(dailyData.time[i]);
-        const dayName = date.toLocaleDateString("en-US", {
-          weekday: "short",
-        });
-        const dayDate = date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        });
-
-        const dateElement = document.createElement("div");
-        dateElement.className = "forecast-date";
-        dateElement.innerHTML = `<strong>${dayName}</strong><br><small>${dayDate}</small>`;
-        forecastCard.appendChild(dateElement);
-
-        const maxTemp = dailyData.temperature_2m_max[i];
-        const minTemp = dailyData.temperature_2m_min[i];
-        const cloudCover = dailyData.cloud_cover[i];
-        const precipitation = dailyData.precipitation_sum[i];
-
-        const tempRange = document.createElement("div");
-        tempRange.className = "forecast-temps";
-        tempRange.innerHTML = `
-          <div>High: <strong>${maxTemp}°C</strong></div>
-          <div>Low: <strong>${minTemp}°C</strong></div>
-        `;
-        forecastCard.appendChild(tempRange);
-
-        const conditions = document.createElement("div");
-        conditions.className = "forecast-conditions";
-        conditions.innerHTML = `
-          <div>☁️ ${getCloudCover(cloudCover)}</div>
-          <div>🌧️ ${precipitation}mm</div>
-        `;
-        forecastCard.appendChild(conditions);
-
-        forecastGrid.appendChild(forecastCard);
-      }
-    }
-
-    forecastSection.appendChild(forecastGrid);
-    container.appendChild(forecastSection);
-  }
+  container.appendChild(buildCurrentSection(current));
+  if (daily?.time) container.appendChild(buildForecastSection(daily));
 }
 
-function getCloudCover(cloudCover) {
-  if (cloudCover > 75) {
-    return "Overcast";
-  } else if (cloudCover > 50) {
-    return "Mostly Cloudy";
-  } else if (cloudCover > 25) {
-    return "Partly Cloudy";
-  } else {
-    return "Clear";
+function buildCurrentSection(current) {
+  const section = el("div", "weather-section");
+  section.appendChild(el("h2", "section-title", "Current Weather"));
+
+  const details = [
+    { label: "Temperature: ", value: `${current.temperature_2m}°C`, isTemp: true },
+    { label: "Feels Like: ", value: `${current.apparent_temperature}°C`, isTemp: true },
+    { label: "Humidity: ", value: `${current.relative_humidity_2m}%` },
+    { label: "Pressure: ", value: `${current.surface_pressure} hPa` },
+    { label: "Wind Speed: ", value: `${current.wind_speed_10m} m/s` },
+    { label: "Clouds: ", value: getCloudCover(current.cloud_cover) },
+  ];
+
+  const grid = el("div", "weather-grid");
+  details.forEach(({ label, value, isTemp }) => {
+    const card = el("div", "weather-card");
+    card.appendChild(el("span", "weather-label", label));
+    const valueEl = el("span", "weather-value", value);
+    card.appendChild(valueEl);
+
+    if (isTemp) {
+      card.style.cursor = "pointer";
+      card.addEventListener("click", () => toggleTempUnit(valueEl));
+    }
+    grid.appendChild(card);
+  });
+
+  section.appendChild(grid);
+  section.appendChild(
+    el("span", "info-hint", "💡 Click temperature cards to convert between °C and °F")
+  );
+  return section;
+}
+
+function toggleTempUnit(valueEl) {
+  const num = parseFloat(valueEl.textContent);
+  const isCelsius = valueEl.textContent.endsWith("C");
+  valueEl.textContent = isCelsius
+    ? `${((num * 9) / 5 + 32).toFixed(1)}°F`
+    : `${(((num - 32) * 5) / 9).toFixed(1)}°C`;
+}
+
+function buildForecastSection(daily) {
+  const section = el("div", "weather-section");
+  section.appendChild(el("h2", "section-title", `${FORECAST_DAYS}-Day Forecast`));
+
+  const grid = el("div", "forecast-grid");
+  for (let i = 1; i <= FORECAST_DAYS; i++) {
+    if (daily.time[i]) grid.appendChild(buildForecastCard(daily, i));
   }
+
+  section.appendChild(grid);
+  return section;
+}
+
+function buildForecastCard(daily, i) {
+  const card = el("div", "forecast-card");
+  const date = new Date(daily.time[i]);
+
+  const dateEl = el("div", "forecast-date");
+  dateEl.innerHTML = `<strong>${date.toLocaleDateString("en-US", { weekday: "short" })}</strong><br><small>${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</small>`;
+  card.appendChild(dateEl);
+
+  const temps = el("div", "forecast-temps");
+  temps.innerHTML = `
+    <div>High: <strong>${daily.temperature_2m_max[i]}°C</strong></div>
+    <div>Low: <strong>${daily.temperature_2m_min[i]}°C</strong></div>
+  `;
+  card.appendChild(temps);
+
+  const conditions = el("div", "forecast-conditions");
+  conditions.innerHTML = `
+    <div>☁️ ${getCloudCover(daily.cloud_cover_mean[i])}</div>
+    <div>🌧️ ${daily.precipitation_sum[i]}mm</div>
+  `;
+  card.appendChild(conditions);
+
+  return card;
+}
+
+function getCloudCover(cover) {
+  if (cover > 75) return "Overcast";
+  if (cover > 50) return "Mostly Cloudy";
+  if (cover > 25) return "Partly Cloudy";
+  return "Clear";
 }
